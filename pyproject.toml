@@ -56,7 +56,7 @@ psutil = ">=5.0.0"
 pydantic = "<1.11, >=1.9.0"
 pymysql = { version = "~1.0.2" }
 pyparsing = "<3,>=2.4.0"
-python = ">=3.8,<3.12"
+python = ">=3.12,<3.13"
 python-dateutil = "^2.8.1"
 pyyaml = ">=6.0.1"
 rich = { extras = ["jupyter"], version = ">=12.0.0" }
@@ -77,7 +77,7 @@ secure = { version = "~0.3.0", optional = true }
 
 # Optional dependencies for project templates
 copier = { version = ">=8.1.0", optional = true }
-pyyaml-include = {version = "<2.0", optional = true}
+pyyaml-include = { version = "<2.0", optional = true }
 jinja2-time = { version = "^0.2.0", optional = true }
 
 # Optional terraform dependency for stack recipes and ZenServer deployments
@@ -170,7 +170,7 @@ types-psutil = { version = "^5.8.13", optional = true }
 types-passlib = { version = "^1.7.7", optional = true }
 
 # mlstacks dependencies
-mlstacks = { version = "0.8.0", optional = true }
+mlstacks = { git = "https://github.com/jlopezpena/mlstacks", branch = "develop", optional = true }
 
 [tool.poetry.extras]
 server = [
@@ -459,6 +459,6 @@ module = [
     "mlstacks.*",
     "matplotlib.*",
     "IPython.*",
-    "huggingface_hub.*"
+    "huggingface_hub.*",
 ]
 ignore_missing_imports = true
