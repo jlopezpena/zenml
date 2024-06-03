@@ -140,6 +140,8 @@ from zenml.models import (
     SecretRequest,
     SecretResponse,
     SecretUpdate,
+    ServerSettingsResponse,
+    ServerSettingsUpdate,
     ServiceAccountFilter,
     ServiceAccountRequest,
     ServiceAccountResponse,
@@ -693,6 +695,55 @@ class Client(metaclass=ClientMetaClass):
             GlobalConfiguration().set_active_workspace(workspace)
         return workspace
 
+    # ----------------------------- Server Settings ----------------------------
+
+    def get_settings(self, hydrate: bool = True) -> ServerSettingsResponse:
+        """Get the server settings.
+
+        Args:
+            hydrate: Flag deciding whether to hydrate the output model(s)
+                by including metadata fields in the response.
+
+        Returns:
+            The server settings.
+        """
+        return self.zen_store.get_server_settings(hydrate=hydrate)
+
+    def update_server_settings(
+        self,
+        updated_name: Optional[str] = None,
+        updated_logo_url: Optional[str] = None,
+        updated_enable_analytics: Optional[bool] = None,
+        updated_enable_announcements: Optional[bool] = None,
+        updated_enable_updates: Optional[bool] = None,
+        updated_onboarding_state: Optional[Dict[str, Any]] = None,
+    ) -> ServerSettingsResponse:
+        """Update the server settings.
+
+        Args:
+            updated_name: Updated name for the server.
+            updated_logo_url: Updated logo URL for the server.
+            updated_enable_analytics: Updated value whether to enable
+                analytics for the server.
+            updated_enable_announcements: Updated value whether to display
+                announcements about ZenML.
+            updated_enable_updates: Updated value whether to display updates
+                about ZenML.
+            updated_onboarding_state: Updated onboarding state for the server.
+
+        Returns:
+            The updated server settings.
+        """
+        update_model = ServerSettingsUpdate(
+            server_name=updated_name,
+            logo_url=updated_logo_url,
+            enable_analytics=updated_enable_analytics,
+            display_announcements=updated_enable_announcements,
+            display_updates=updated_enable_updates,
+            onboarding_state=updated_onboarding_state,
+        )
+        return self.zen_store.update_server_settings(update_model)
+
     # ---------------------------------- Users ---------------------------------
 
     def create_user(
@@ -816,6 +867,7 @@ class Client(metaclass=ClientMetaClass):
         updated_password: Optional[str] = None,
         old_password: Optional[str] = None,
         updated_is_admin: Optional[bool] = None,
+        updated_metadata: Optional[Dict[str, Any]] = None,
         active: Optional[bool] = None,
     ) -> UserResponse:
         """Update a user.
@@ -831,6 +883,7 @@ class Client(metaclass=ClientMetaClass):
             old_password: The old password of the user. Required for password
                 update.
             updated_is_admin: Whether the user should be an admin.
+            updated_metadata: The new metadata for the user.
             active: Use to activate or deactivate the user.
 
         Returns:
@@ -866,6 +919,9 @@ class Client(metaclass=ClientMetaClass):
             user_update.is_admin = updated_is_admin
         if active is not None:
             user_update.active = active
+
+        if updated_metadata is not None:
+            user_update.user_metadata = updated_metadata
 
         return self.zen_store.update_user(
             user_id=user.id, user_update=user_update
@@ -2359,6 +2415,7 @@ class Client(metaclass=ClientMetaClass):
         self,
         name_id_or_prefix: Union[str, UUID],
         version: Optional[str] = None,
+        all_versions: bool = False,
     ) -> None:
         """Delete a pipeline.
 
@@ -2366,11 +2423,30 @@ class Client(metaclass=ClientMetaClass):
             name_id_or_prefix: The name, ID or ID prefix of the pipeline.
             version: The pipeline version. If left empty, will delete
                 the latest version.
+            all_versions: If `True`, delete all versions of the pipeline.
+
+        Raises:
+            ValueError: If an ID is supplied when trying to delete all versions
+                of a pipeline.
         """
-        pipeline = self.get_pipeline(
-            name_id_or_prefix=name_id_or_prefix, version=version
-        )
-        self.zen_store.delete_pipeline(pipeline_id=pipeline.id)
+        if all_versions:
+            if is_valid_uuid(name_id_or_prefix):
+                raise ValueError(
+                    "You need to supply a name (not an ID) when trying to "
+                    "delete all versions of a pipeline."
+                )
+
+            for pipeline in depaginate(
+                functools.partial(
+                    Client().list_pipelines, name=name_id_or_prefix
+                )
+            ):
+                Client().delete_pipeline(pipeline.id)
+        else:
+            pipeline = self.get_pipeline(
+                name_id_or_prefix=name_id_or_prefix, version=version
+            )
+            self.zen_store.delete_pipeline(pipeline_id=pipeline.id)
 
     # -------------------------------- Builds ----------------------------------
 
@@ -4909,6 +4985,7 @@ class Client(metaclass=ClientMetaClass):
         configuration: Optional[Dict[str, str]] = None,
         resource_id: Optional[str] = None,
         description: Optional[str] = None,
+        expires_at: Optional[datetime] = None,
         expires_skew_tolerance: Optional[int] = None,
         expiration_seconds: Optional[int] = None,
         labels: Optional[Dict[str, Optional[str]]] = None,
@@ -4952,6 +5029,7 @@ class Client(metaclass=ClientMetaClass):
                 If set to the empty string, the existing resource ID will be
                 removed.
             description: The description of the service connector.
+            expires_at: The new UTC expiration time of the service connector.
             expires_skew_tolerance: The allowed expiration skew for the service
                 connector credentials.
             expiration_seconds: The expiration time of the service connector.
@@ -5018,11 +5096,13 @@ class Client(metaclass=ClientMetaClass):
             connector_type=connector.connector_type,
             description=description or connector_model.description,
             auth_method=auth_method or connector_model.auth_method,
+            expires_at=expires_at,
             expires_skew_tolerance=expires_skew_tolerance,
             expiration_seconds=expiration_seconds,
             user=self.active_user.id,
             workspace=self.active_workspace.id,
         )
+
         # Validate and configure the resources
         if configuration is not None:
             # The supplied configuration is a drop-in replacement for the
@@ -5619,7 +5699,7 @@ class Client(metaclass=ClientMetaClass):
 
     def get_model_version(
         self,
-        model_name_or_id: Union[str, UUID],
+        model_name_or_id: Optional[Union[str, UUID]] = None,
         model_version_name_or_number_or_id: Optional[
             Union[str, int, ModelStages, UUID]
         ] = None,
@@ -5642,7 +5722,17 @@ class Client(metaclass=ClientMetaClass):
         Raises:
             RuntimeError: In case method inputs don't adhere to restrictions.
             KeyError: In case no model version with the identifiers exists.
+            ValueError: In case retrieval is attempted using non UUID model version
+                identifier and no model identifier provided.
         """
+        if (
+            not is_valid_uuid(model_version_name_or_number_or_id)
+            and model_name_or_id is None
+        ):
+            raise ValueError(
+                "No model identifier provided and model version identifier "
+                f"`{model_version_name_or_number_or_id}` is not a valid UUID."
+            )
         if cll := client_lazy_loader(
             "get_model_version",
             model_name_or_id=model_name_or_id,

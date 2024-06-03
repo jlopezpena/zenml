@@ -88,6 +88,14 @@ class KubernetesOrchestrator(ContainerizedOrchestrator):
         if incluster is None:
             incluster = self.config.incluster
 
+        if incluster:
+            kube_utils.load_kube_config(
+                incluster=incluster,
+                context=self.config.kubernetes_context,
+            )
+            self._k8s_client = k8s_client.ApiClient()
+            return self._k8s_client
+
         # Refresh the client also if the connector has expired
         if self._k8s_client and not self.connector_has_expired():
             return self._k8s_client
@@ -383,6 +391,20 @@ class KubernetesOrchestrator(ContainerizedOrchestrator):
         # Authorize pod to run Kubernetes commands inside the cluster.
         service_account_name = self._get_service_account_name(settings)
 
+        if settings.pod_settings:
+            # Remove all settings that specify on which pod to run for the
+            # orchestrator pod. These settings should only be used
+            # for the pods executing the actual steps.
+            pod_settings = settings.pod_settings.copy(
+                update={
+                    "resources": {},
+                    "node_selectors": {},
+                    "affinity": {},
+                    "tolerations": [],
+                }
+            )
+            settings = settings.copy(update={"pod_settings": pod_settings})
+
         # Schedule as CRON job if CRON schedule is given.
         if deployment.schedule:
             if not deployment.schedule.cron_expression:
@@ -439,7 +461,7 @@ class KubernetesOrchestrator(ContainerizedOrchestrator):
         if settings.synchronous:
             logger.info("Waiting for Kubernetes orchestrator pod...")
             kube_utils.wait_pod(
-                core_api_fn=lambda: self._k8s_core_api,
+                kube_client_fn=self.get_kube_client,
                 pod_name=pod_name,
                 namespace=self.config.kubernetes_namespace,
                 exit_condition_lambda=kube_utils.pod_is_done,

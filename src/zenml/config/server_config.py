@@ -29,6 +29,7 @@ from zenml.constants import (
     DEFAULT_ZENML_SERVER_LOGIN_RATE_LIMIT_DAY,
     DEFAULT_ZENML_SERVER_LOGIN_RATE_LIMIT_MINUTE,
     DEFAULT_ZENML_SERVER_MAX_DEVICE_AUTH_ATTEMPTS,
+    DEFAULT_ZENML_SERVER_NAME,
     DEFAULT_ZENML_SERVER_PIPELINE_RUN_AUTH_WINDOW,
     DEFAULT_ZENML_SERVER_SECURE_HEADERS_CACHE,
     DEFAULT_ZENML_SERVER_SECURE_HEADERS_CONTENT,
@@ -38,6 +39,7 @@ from zenml.constants import (
     DEFAULT_ZENML_SERVER_SECURE_HEADERS_REFERRER,
     DEFAULT_ZENML_SERVER_SECURE_HEADERS_XFO,
     DEFAULT_ZENML_SERVER_SECURE_HEADERS_XXP,
+    DEFAULT_ZENML_SERVER_USE_LEGACY_DASHBOARD,
     ENV_ZENML_SERVER_PREFIX,
 )
 from zenml.enums import AuthScheme
@@ -63,8 +65,16 @@ class ServerConfiguration(BaseModel):
 
     Attributes:
         deployment_type: The type of ZenML server deployment that is running.
-        base_url: The base URL of the ZenML server.
-        root_url_path: The root URL path of the ZenML server.
+        server_url: The URL where the ZenML server API is reachable. Must be
+            configured for features that involve triggering workloads from the
+            ZenML dashboard (e.g., running pipelines). If not specified, the
+            clients will use the same URL used to connect them to the ZenML
+            server.
+        dashboard_url: The URL where the ZenML dashboard is reachable.
+            If not specified, the `server_url` value is used. This should be
+            configured if the dashboard is served from a different URL than the
+            ZenML server.
+        root_url_path: The root URL path for the ZenML API and dashboard.
         auth_scheme: The authentication scheme used by the ZenML server.
         jwt_token_algorithm: The algorithm used to sign and verify JWT tokens.
         jwt_token_issuer: The issuer of the JWT tokens. If not specified, the
@@ -91,10 +101,6 @@ class ServerConfiguration(BaseModel):
             2.0 device authorization request expires.
         device_auth_polling_interval: The polling interval in seconds used to
             poll the OAuth 2.0 device authorization endpoint.
-        dashboard_url: The URL where the ZenML dashboard is hosted. Used to
-            construct the OAuth 2.0 device authorization endpoint. If not set,
-            a partial URL is returned to the client which is used to construct
-            the full URL based on the server's root URL path.
         device_expiration_minutes: The time in minutes that an OAuth 2.0 device is
             allowed to be used to authenticate with the ZenML server. If not
             set or if `jwt_token_expire_minutes` is not set, the devices are
@@ -202,14 +208,29 @@ class ServerConfiguration(BaseModel):
             of the reserved values `enabled`, `yes`, `true`, `on`, the
             `Permissions-Policy` header will be set to the default value
             (`accelerometer=(), camera=(), geolocation=(), gyroscope=(),
-              magnetometer=(), microphone=(), payment=(), usb=()`). If set to
+            magnetometer=(), microphone=(), payment=(), usb=()`). If set to
             one of the reserved values `disabled`, `no`, `none`, `false`, `off`
             or to an empty string, the `Permissions-Policy` header will not be
             included in responses.
+        use_legacy_dashboard: Whether to use the legacy dashboard. If set to
+            `True`, the dashboard will be used with the old UI. If set to
+            `False`, the new dashboard will be used.
+        server_name: The name of the ZenML server. Used only during initial
+            deployment. Can be changed later as a part of the server settings.
+        display_announcements: Whether to display announcements about ZenML in
+            the dashboard. Used only during initial deployment. Can be changed
+            later as a part of the server settings.
+        display_updates: Whether to display notifications about ZenML updates in
+            the dashboard. Used only during initial deployment. Can be changed
+            later as a part of the server settings.
+        auto_activate: Whether to automatically activate the server and create a
+            default admin user account with an empty password during the initial
+            deployment.
     """
 
     deployment_type: ServerDeploymentType = ServerDeploymentType.OTHER
-    base_url: str = ""
+    server_url: Optional[str] = None
+    dashboard_url: Optional[str] = None
     root_url_path: str = ""
     metadata: Dict[str, Any] = {}
     auth_scheme: AuthScheme = AuthScheme.OAUTH2_PASSWORD_BEARER
@@ -229,7 +250,6 @@ class ServerConfiguration(BaseModel):
     device_auth_polling_interval: int = (
         DEFAULT_ZENML_SERVER_DEVICE_AUTH_POLLING
     )
-    dashboard_url: Optional[str] = None
     device_expiration_minutes: Optional[int] = None
     trusted_device_expiration_minutes: Optional[int] = None
 
@@ -274,6 +294,12 @@ class ServerConfiguration(BaseModel):
     secure_headers_permissions: Union[bool, str] = (
         DEFAULT_ZENML_SERVER_SECURE_HEADERS_PERMISSIONS
     )
+    use_legacy_dashboard: bool = DEFAULT_ZENML_SERVER_USE_LEGACY_DASHBOARD
+
+    server_name: str = DEFAULT_ZENML_SERVER_NAME
+    display_announcements: bool = True
+    display_updates: bool = True
+    auto_activate: bool = False
 
     _deployment_id: Optional[UUID] = None
 
