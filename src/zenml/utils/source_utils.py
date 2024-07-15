@@ -19,7 +19,15 @@ import inspect
 import os
 import site
 import sys
-from distutils.sysconfig import get_python_lib
+
+try:
+    from distutils.sysconfig import get_python_lib
+
+    USE_DISTUTILS = True
+except ImportError:
+    from sysconfig import get_path
+
+    USE_DISTUTILS = False
 from pathlib import Path, PurePath
 from types import ModuleType
 from typing import (
@@ -291,7 +299,10 @@ def is_standard_lib_file(file_path: str) -> bool:
         True if the file belongs to the Python standard library, False
         otherwise.
     """
-    stdlib_root = get_python_lib(standard_lib=True)
+    if USE_DISTUTILS:
+        stdlib_root = get_python_lib(standard_lib=True)
+    else:
+        stdlib_root = get_path("stdlib")
     logger.debug("Standard library root: %s", stdlib_root)
     return Path(stdlib_root).resolve() in Path(file_path).resolve().parents
 
