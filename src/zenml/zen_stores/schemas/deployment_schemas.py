@@ -19,7 +19,7 @@ from uuid import UUID
 
 from sqlalchemy import TEXT, Column, UniqueConstraint
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import defer, selectinload
 from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship, String
 
@@ -173,6 +173,16 @@ class DeploymentSchema(NamedSchema, table=True):
             A list of query options.
         """
         options = []
+
+        if not include_metadata:
+            # deployment_metadata and auth_key are only read when metadata is
+            # included. Skip fetching them otherwise.
+            options.extend(
+                [
+                    defer(jl_arg(DeploymentSchema.deployment_metadata)),
+                    defer(jl_arg(DeploymentSchema.auth_key)),
+                ]
+            )
 
         if include_resources:
             options.extend(

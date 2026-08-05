@@ -19,7 +19,7 @@ from uuid import UUID
 
 from sqlalchemy import Column, String
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import defer, selectinload
 from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -133,6 +133,11 @@ class HookInvocationSchema(BaseSchema, table=True):
         from zenml.zen_stores.schemas import ArtifactVersionSchema
 
         options = []
+
+        if not include_metadata:
+            # exception_info is a large column only read when metadata is
+            # included. Skip fetching it otherwise.
+            options.append(defer(jl_arg(HookInvocationSchema.exception_info)))
 
         if include_resources:
             options.extend(

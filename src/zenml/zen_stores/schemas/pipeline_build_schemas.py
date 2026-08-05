@@ -19,7 +19,7 @@ from uuid import UUID
 
 from sqlalchemy import Column, String
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import defer, joinedload
 from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship
 
@@ -127,6 +127,11 @@ class PipelineBuildSchema(BaseSchema, table=True):
             A list of query options.
         """
         options = []
+
+        if not include_metadata:
+            # images is a large column only read when metadata is included.
+            # Skip fetching it otherwise.
+            options.append(defer(jl_arg(PipelineBuildSchema.images)))
 
         if include_metadata:
             options.extend(

@@ -18,7 +18,7 @@ from typing import Any, Optional, Sequence
 from uuid import UUID
 
 from sqlalchemy import TEXT, Column, UniqueConstraint
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import defer, joinedload
 from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship
 
@@ -103,6 +103,11 @@ class FlavorSchema(NamedSchema, table=True):
             A list of query options.
         """
         options = []
+
+        if not include_metadata:
+            # config_schema is a large column only read when metadata is
+            # included. Skip fetching it otherwise.
+            options.append(defer(jl_arg(FlavorSchema.config_schema)))
 
         if include_resources:
             options.extend(

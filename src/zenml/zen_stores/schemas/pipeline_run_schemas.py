@@ -23,6 +23,7 @@ from sqlalchemy import String, UniqueConstraint
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import (
     Session,
+    defer,
     joinedload,
     object_session,
     selectinload,
@@ -413,6 +414,18 @@ class PipelineRunSchema(NamedSchema, RunMetadataInterface, table=True):
         single_loader = selectinload if many else joinedload
 
         options = []
+
+        if not include_metadata:
+            # orchestrator_environment and exception_info are large columns only
+            # read when metadata is included. Skip fetching them otherwise.
+            # pipeline_configuration and client_environment cannot be deferred
+            # the same way: `to_model` reads them for every run regardless.
+            options.extend(
+                [
+                    defer(jl_arg(PipelineRunSchema.orchestrator_environment)),
+                    defer(jl_arg(PipelineRunSchema.exception_info)),
+                ]
+            )
 
         if include_metadata:
             options.extend(
