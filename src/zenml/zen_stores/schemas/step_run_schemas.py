@@ -21,7 +21,7 @@ from uuid import UUID
 from pydantic import ConfigDict
 from sqlalchemy import TEXT, Column, String, UniqueConstraint
 from sqlalchemy.dialects.mysql import MEDIUMTEXT
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import defer, joinedload, selectinload
 from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -306,6 +306,17 @@ class StepRunSchema(NamedSchema, RunMetadataInterface, table=True):
                 [
                     selectinload(jl_arg(StepRunSchema.parents)),
                     selectinload(jl_arg(StepRunSchema.run_metadata)),
+                ]
+            )
+        else:
+            # source_code, docstring and exception_info are large columns only
+            # read when metadata is included. Skip fetching them otherwise:
+            # they dominate the size of a step run row.
+            options.extend(
+                [
+                    defer(jl_arg(StepRunSchema.source_code)),
+                    defer(jl_arg(StepRunSchema.docstring)),
+                    defer(jl_arg(StepRunSchema.exception_info)),
                 ]
             )
 
